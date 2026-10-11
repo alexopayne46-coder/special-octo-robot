@@ -10,6 +10,7 @@ import { runMigrations } from './src/schema/index.js';
 import { logger } from './src/core/logger.js';
 import { IBot } from './src/core/bot.js';
 import { HttpPlayAdapter } from './src/adapters/http-play/adapter.js';
+import { WebkitServer } from './webkit/index.js';
 
 await initializeLock();
 await $hypervisorLayer.autoload();
@@ -25,7 +26,9 @@ const db = $dbManager.registerDatabase('main', {
 
 runMigrations(db);
 
-await import('./webkit/index');
 
 // Campaign watcher worker: watches ad_campaigns statuses
 await $campaignLayer.start();
+
+// Start Webkit server
+const webkitServer = new WebkitServer();

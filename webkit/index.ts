@@ -175,60 +175,67 @@ const handleImport: RouteHandler = async (req, { log }) => {
   return httpPlayAdapter.handleImport(file, importType, clearBeforeImport, groupName);
 };
 
+export class WebkitServer {
+  private server: ReturnType<typeof serve>;
+  private shuttingDown = false;
 
-const server = serve({
-  hostname: isProd ? "0.0.0.0" : "localhost",
-  port: PORT,
-  routes: {
-    "/api/play": route("POST", handlePlay),
-    "/api/import": route("POST", handleImport),
-    "/*": index,
-  },
+  async shutdown(signal: string, exitCode = 0) {
+    if (this.shuttingDown) return;
+    this.shuttingDown = true;
+    logger.info({ signal }, "shutting down");
 
-  error(err) {
-    logger.error({ err }, "unhandled server error");
-    return json({ success: false, error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
-  },
+    setTimeout(() => {
+      logger.error("graceful shutdown timed out, forcing exit");
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
 
-  development: !isProd && {
-    hmr: true,
-    console: true,
-  },
-});
-
-logger.info({ url: server.url.toString(), env: process.env.NODE_ENV ?? "development" }, "server running");
-
-
-let shuttingDown = false;
-
-async function shutdown(signal: string, exitCode = 0) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  logger.info({ signal }, "shutting down");
-
-  setTimeout(() => {
-    logger.error("graceful shutdown timed out, forcing exit");
-    process.exit(1);
-  }, SHUTDOWN_TIMEOUT_MS).unref();
-
-  try {
-    await server.stop();
-    logger.info("server stopped");
-  } catch (err) {
-    logger.error({ err }, "error while stopping server");
-    exitCode = 1;
+    try {
+      await this.server.stop();
+      logger.info("server stopped");
+    } catch (err) {
+      logger.error({ err }, "error while stopping server");
+      exitCode = 1;
+    }
+    process.exit(exitCode);
   }
-  process.exit(exitCode);
+
+  constructor() {
+    this.server = serve({
+      hostname: isProd ? "0.0.0.0" : "localhost",
+      port: PORT,
+      routes: {
+        "/api/play": route("POST", handlePlay),
+        "/api/import": route("POST", handleImport),
+        "/*": index,
+      },
+
+      error(err) {
+        logger.error({ err }, "unhandled server error");
+        return json({ success: false, error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
+      },
+
+      development: !isProd && {
+        hmr: true,
+        console: true,
+      },
+    });
+
+
+    logger.info({ url: this.server.url.toString(), env: process.env.NODE_ENV ?? "development" }, "server running");
+
+    process.on("SIGINT", () => void this.shutdown("SIGINT"));
+    process.on("SIGTERM", () => void this.shutdown("SIGTERM"));
+
+    process.on("unhandledRejection", (reason) => {
+      logger.error({ err: reason }, "unhandled promise rejection");
+    });
+
+    process.on("uncaughtException", (err) => {
+      logger.fatal({ err }, "uncaught exception");
+      void this.shutdown("uncaughtException", 1);
+    });
+  }
 }
 
-process.on("SIGINT", () => void shutdown("SIGINT"));
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
-process.on("unhandledRejection", (reason) => {
-  logger.error({ err: reason }, "unhandled promise rejection");
-});
 
-process.on("uncaughtException", (err) => {
-  logger.fatal({ err }, "uncaught exception");
-  void shutdown("uncaughtException", 1);
-});
