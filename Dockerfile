@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Install dependencies
-RUN bun install --production
+RUN bun install --production --ignore-scripts
 
 # Copy application files
 COPY . .

@@ -10,3 +10,5 @@ tdata
 *.log
 .DS_Store
 bun.lockb
+build
+dist
