@@ -206,6 +206,8 @@ export class WebkitServer {
       routes: {
         "/api/play": route("POST", handlePlay),
         "/api/import": route("POST", handleImport),
+        "/health": () => new Response("OK", { status: 200 }),
+        "/": index,
         "/*": index,
       },
 
