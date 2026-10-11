@@ -69,10 +69,7 @@ const server = serve({
         );
       }
     },
-    "/*": (req) => {
-      logger.info({ method: req.method, url: req.url }, "Serving static content");
-      return index;
-    },
+    "/*": index,
   },
 
   development: process.env.NODE_ENV !== "production" && {
