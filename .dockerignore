@@ -4,7 +4,9 @@ node_modules
 .idea
 .vscode
 .env
+.env.*
 data
+tdata
 *.log
 .DS_Store
 bun.lockb
