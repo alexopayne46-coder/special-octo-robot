@@ -1,23 +1,10 @@
-# Use official Bun image
 FROM docker.io/oven/bun:latest
-
-# Set working directory
 WORKDIR /app
-
-# Copy package files
 COPY package.json bun.lock ./
-
-# Install dependencies
 RUN bun install --production --ignore-scripts
-
-# Copy application files
 COPY . .
-
-# Create data directory for SQLite database
 RUN mkdir -p /app/data
-
-# Expose the default Bun port
+ENV PORT=3000
+ENV ENV=production
 EXPOSE 3000
-
-# Run the application
 CMD ["bun", "run", "index.ts"]

@@ -12,3 +12,5 @@ tdata
 bun.lockb
 build
 dist
+docker-compose.yml
+nginx.conf
