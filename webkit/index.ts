@@ -13,7 +13,7 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 const httpPlayAdapter = new HttpPlayAdapter();
 
 
-/** An error that is safe to show to the client. */
+
 class AppError extends Error {
   constructor(
     public readonly status: number,
@@ -26,11 +26,7 @@ class AppError extends Error {
   }
 }
 
-/**
- * Map errors thrown by deeper layers to AppErrors.
- * If your adapter has its own validation error class, map it to a 400 here,
- * e.g.  if (err instanceof ValidationError) return new AppError(400, "VALIDATION_ERROR", err.message);
- */
+
 function normalizeError(err: unknown): AppError | null {
   if (err instanceof AppError) return err;
   return null;
@@ -72,10 +68,7 @@ async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
-/**
- * Wraps a handler with: request ID, method check, timing, access log,
- * and centralized error handling. Handlers just return data or throw.
- */
+
 function route(method: string, handler: RouteHandler) {
   return async (
     req: Request,

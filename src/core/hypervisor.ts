@@ -57,7 +57,7 @@ export class Hypervisor {
   }
 
   public async autoload(configPath?: string): Promise<string[]> {
-    const path = configPath || join(process.cwd(), 'autoloader.json');
+    const path = configPath || "./data/autoloader.json";
     logger.info(`Loading accounts from ${path}`);
 
     try {
