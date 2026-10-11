@@ -3,79 +3,239 @@ import index from "./index.html";
 import { logger } from "../src/core/logger";
 import { HttpPlayAdapter } from "../src/adapters/http-play/adapter";
 
+
+const isProd = process.env.NODE_ENV === "production";
+const PORT = Number(process.env.PORT ?? 3000);
+const MAX_JSON_BYTES = 1 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 const httpPlayAdapter = new HttpPlayAdapter();
 
+
+/** An error that is safe to show to the client. */
+class AppError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
+}
+
+/**
+ * Map errors thrown by deeper layers to AppErrors.
+ * If your adapter has its own validation error class, map it to a 400 here,
+ * e.g.  if (err instanceof ValidationError) return new AppError(400, "VALIDATION_ERROR", err.message);
+ */
+function normalizeError(err: unknown): AppError | null {
+  if (err instanceof AppError) return err;
+  return null;
+}
+
+
+type Log = typeof logger;
+type RouteContext = { log: Log; reqId: string };
+type RouteHandler = (req: Request, ctx: RouteContext) => Promise<unknown>;
+
+function json(data: unknown, status = 200, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+  const declared = Number(req.headers.get("content-length") ?? 0);
+  if (declared > MAX_JSON_BYTES) {
+    throw new AppError(413, "PAYLOAD_TOO_LARGE", "Request body too large");
+  }
+
+  const text = await req.text();
+  if (Buffer.byteLength(text) > MAX_JSON_BYTES) {
+    throw new AppError(413, "PAYLOAD_TOO_LARGE", "Request body too large");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new AppError(400, "INVALID_JSON", "Request body is not valid JSON");
+  }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new AppError(400, "INVALID_BODY", "Request body must be a JSON object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * Wraps a handler with: request ID, method check, timing, access log,
+ * and centralized error handling. Handlers just return data or throw.
+ */
+function route(method: string, handler: RouteHandler) {
+  return async (
+    req: Request,
+    srv?: { requestIP?: (r: Request) => { address: string } | null }
+  ): Promise<Response> => {
+    const startedAt = performance.now();
+    const url = new URL(req.url);
+    const reqId = (req.headers.get("x-request-id") ?? "").slice(0, 64) || crypto.randomUUID();
+    const log = logger.child({ reqId });
+    const baseMeta = {
+      method: req.method,
+      path: url.pathname,
+      ip: srv?.requestIP?.(req)?.address,
+    };
+
+    log.debug(baseMeta, "request started");
+
+    let response: Response;
+    try {
+      if (req.method !== method) {
+        response = json(
+          { success: false, error: "Method not allowed", code: "METHOD_NOT_ALLOWED", requestId: reqId },
+          405,
+          { Allow: method }
+        );
+      } else {
+        const result = await handler(req, { log, reqId });
+        response = json(result);
+      }
+    } catch (err) {
+      const appErr = normalizeError(err);
+
+      if (appErr) {
+        log.warn({ err, code: appErr.code }, "request rejected");
+        response = json(
+          {
+            success: false,
+            error: appErr.message,
+            code: appErr.code,
+            requestId: reqId,
+            ...(appErr.details !== undefined && { details: appErr.details }),
+          },
+          appErr.status
+        );
+      } else {
+        log.error({ err }, "unhandled error in request handler");
+        response = json(
+          { success: false, error: "Internal server error", code: "INTERNAL_ERROR", requestId: reqId },
+          500
+        );
+      }
+    }
+
+    response.headers.set("X-Request-Id", reqId);
+
+    const durationMs = Math.round(performance.now() - startedAt);
+    const level = response.status >= 500 ? "error" : response.status >= 400 ? "warn" : "info";
+    log[level]({ ...baseMeta, status: response.status, durationMs }, "request completed");
+
+    return response;
+  };
+}
+
+
+const handlePlay: RouteHandler = async (req, { log }) => {
+  const body = await readJsonBody(req);
+  log.debug({ body }, "processing /api/play");
+  return httpPlayAdapter.handleRequest(body);
+};
+
+const handleImport: RouteHandler = async (req, { log }) => {
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    throw new AppError(400, "INVALID_FORM_DATA", "Request body is not valid form data");
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    throw new AppError(400, "NO_FILE", "No file provided");
+  }
+  if (file.size === 0) {
+    throw new AppError(400, "EMPTY_FILE", "Uploaded file is empty");
+  }
+  if (file.size > MAX_IMPORT_BYTES) {
+    throw new AppError(413, "FILE_TOO_LARGE", `File exceeds ${MAX_IMPORT_BYTES / 1024 / 1024} MB limit`);
+  }
+
+  const importType = formData.get("type");
+  if (typeof importType !== "string" || importType.length === 0) {
+    throw new AppError(400, "MISSING_TYPE", "Import type is required");
+  }
+
+  const clearBeforeImport = formData.get("clearBeforeImport") === "true";
+  const rawGroupName = formData.get("groupName");
+  const groupName = typeof rawGroupName === "string" ? rawGroupName : undefined;
+
+  log.info(
+    { importType, clearBeforeImport, groupName, fileName: file.name, fileSize: file.size },
+    "processing /api/import"
+  );
+
+  return httpPlayAdapter.handleImport(file, importType, clearBeforeImport, groupName);
+};
+
+
 const server = serve({
-  hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost',
-  port: 3000,
+  hostname: isProd ? "0.0.0.0" : "localhost",
+  port: PORT,
   routes: {
-    '/api/play': async (req) => {
-      logger.info({ method: req.method, url: req.url }, "/api/play request");
-      if (req.method !== "POST") {
-        logger.warn({ method: req.method }, "Method not allowed for /api/play");
-        return new Response("Method not allowed", { status: 405 });
-      }
-
-      try {
-        const body = await req.json();
-        logger.info({ body }, "Processing /api/play request");
-        const response = await httpPlayAdapter.handleRequest(body);
-        logger.info({ response }, "/api/play request completed");
-        return new Response(JSON.stringify(response), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        logger.error({ error }, "Failed to handle /api/play request");
-        return new Response(
-          JSON.stringify({ success: false, error: "Invalid request" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
-      }
-    },
-    '/api/import': async (req) => {
-      logger.info({ method: req.method, url: req.url }, "/api/import request");
-      if (req.method !== "POST") {
-        logger.warn({ method: req.method }, "Method not allowed for /api/import");
-        return new Response("Method not allowed", { status: 405 });
-      }
-
-      try {
-      const formData = await req.formData();
-      const file = formData.get("file") as File;
-      const importType = formData.get("type") as string;
-      const clearBeforeImport = formData.get("clearBeforeImport") === "true";
-      const groupName = (formData.get("groupName") as string | null) ?? undefined;
-
-      logger.info({ importType, clearBeforeImport, groupName, fileName: file?.name }, "Processing /api/import request");
-
-      if (!file) {
-        logger.warn("No file provided for /api/import");
-        return new Response(
-          JSON.stringify({ success: false, error: "No file provided" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      const response = await httpPlayAdapter.handleImport(file, importType, clearBeforeImport, groupName);
-      logger.info({ response }, "/api/import request completed");
-        return new Response(JSON.stringify(response), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        logger.error({ error }, "Failed to handle /api/import request");
-        return new Response(
-          JSON.stringify({ success: false, error: "Invalid request" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
-      }
-    },
+    "/api/play": route("POST", handlePlay),
+    "/api/import": route("POST", handleImport),
     "/*": index,
   },
 
-  development: process.env.NODE_ENV !== "production" && {
+  error(err) {
+    logger.error({ err }, "unhandled server error");
+    return json({ success: false, error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
+  },
+
+  development: !isProd && {
     hmr: true,
     console: true,
   },
 });
 
-logger.info({ url: server.url }, "Server running at");
+logger.info({ url: server.url.toString(), env: process.env.NODE_ENV ?? "development" }, "server running");
+
+
+let shuttingDown = false;
+
+async function shutdown(signal: string, exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, "shutting down");
+
+  setTimeout(() => {
+    logger.error("graceful shutdown timed out, forcing exit");
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+
+  try {
+    await server.stop();
+    logger.info("server stopped");
+  } catch (err) {
+    logger.error({ err }, "error while stopping server");
+    exitCode = 1;
+  }
+  process.exit(exitCode);
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "unhandled promise rejection");
+});
+
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaught exception");
+  void shutdown("uncaughtException", 1);
+});

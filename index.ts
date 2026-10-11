@@ -29,20 +29,20 @@ runMigrations(db);
 // Campaign watcher worker: watches ad_campaigns statuses
 await $campaignLayer.start();
 
-const lookalikeRepo = new LookALikeUserRepository(db);
+// const lookalikeRepo = new LookALikeUserRepository(db);
 
-// Initialize Telegram Bot
-const botToken = process.env.TELEGRAM_BOT_TOKEN;
-if (botToken) {
-  const bot = IBot.createBot({ token: botToken });
-  bot.adapter.start();
-} else {
-  logger.warn('TELEGRAM_BOT_TOKEN not found in environment variables');
-}
+// // Initialize Telegram Bot
+// const botToken = process.env.TELEGRAM_BOT_TOKEN;
+// if (botToken) {
+//   const bot = IBot.createBot({ token: botToken });
+//   bot.adapter.start();
+// } else {
+//   logger.warn('TELEGRAM_BOT_TOKEN not found in environment variables');
+// }
 
-console.table(await $hypervisorLayer.getAllIRCAddresses())
+// console.table(await $hypervisorLayer.getAllIRCAddresses())
 
-const client = await $hypervisorLayer.getIRClient("0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b")
+// const client = await $hypervisorLayer.getIRClient("0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b")
 
 // await client?.client.setMyUsername('jkjhalkfjhlka')
 
