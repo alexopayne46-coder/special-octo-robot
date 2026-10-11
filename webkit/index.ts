@@ -6,6 +6,8 @@ import { HttpPlayAdapter } from "../src/adapters/http-play/adapter";
 const httpPlayAdapter = new HttpPlayAdapter();
 
 const server = serve({
+  hostname: '0.0.0.0',
+  port: 3000,
   routes: {
     '/api/play': async (req) => {
       if (req.method !== "POST") {
