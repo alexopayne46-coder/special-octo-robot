@@ -29,7 +29,6 @@
     "@mtcute/bun": "^0.32.3",
     "@mtcute/convert": "^0.32.3",
     "@mtcute/dispatcher": "^0.32.3",
-    "@mtcute/node": "^0.32.3",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0",
     "@opentelemetry/sdk-node": "^0.222.0",
