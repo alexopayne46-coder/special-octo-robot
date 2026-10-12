@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -11,10 +9,11 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - NODE_ENV=production
     volumes:
-      # Persist SQLite database
+      # Persist SQLite database (and certs, if they live in ./data)
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
+      # app serves HTTPS now, so use https and skip cert verification
+      test: ["CMD", "wget", "--spider", "--no-check-certificate", "https://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -28,10 +27,14 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443/tcp"
+      - "443:443/udp"   # required for HTTP/3 (QUIC)
     volumes:
       - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./data/certs:/etc/nginx/certs:ro
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     networks:
       - app-network
 
