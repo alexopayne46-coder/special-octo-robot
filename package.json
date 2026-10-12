@@ -22,9 +22,6 @@
     "build:css": "bunx tailwindcss -i ./webkit/index.css -o ./webkit/output.css"
   },
   "dependencies": {
-    "@elysia/openapi": "^1.4.16",
-    "@elysiajs/static": "^1.4.10",
-    "@elysiajs/swagger": "^1.3.1",
     "@libsql/client": "^0.18.0",
     "@mtcute/bun": "^0.32.3",
     "@mtcute/convert": "^0.32.3",
