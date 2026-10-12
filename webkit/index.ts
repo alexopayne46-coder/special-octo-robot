@@ -203,6 +203,12 @@ export class WebkitServer {
     this.server = serve({
       hostname: isProd ? "0.0.0.0" : "localhost",
       port: PORT,
+      http3: true, 
+      http2: true, 
+      tls: {
+        key: Bun.file("./data/key.pem"),
+        cert: Bun.file("./data/cert.pem"),
+      },
       routes: {
         "/api/play": route("POST", handlePlay),
         "/api/import": route("POST", handleImport),

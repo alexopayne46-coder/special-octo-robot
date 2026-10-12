@@ -54,6 +54,7 @@
     "react-aria-components": "^1.22.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
+    "rxjs": "^7.8.2",
     "server": "react-dom/server",
     "tailwind-merge": "^3.7.0",
     "tailwindcss-animate": "^1.0.7",
