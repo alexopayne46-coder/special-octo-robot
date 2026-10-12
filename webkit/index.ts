@@ -206,8 +206,8 @@ export class WebkitServer {
       http3: true, 
       http2: true, 
       tls: {
-        key: Bun.file("./data/key.pem"),
-        cert: Bun.file("./data/cert.pem"),
+        key: process.env.NODE_ENV === "production" ? Bun.file("/etc/nginx/certs/key.pem") : Bun.file("./data/key.pem"),
+        cert: process.env.NODE_ENV === "production" ? Bun.file("/etc/nginx/certs/cert.pem") : Bun.file("./data/cert.pem"),
       },
       routes: {
         "/api/play": route("POST", handlePlay),
