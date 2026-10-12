@@ -201,7 +201,7 @@ export class WebkitServer {
 
   constructor() {
     this.server = serve({
-      hostname: isProd ? "0.0.0.0" : "localhost",
+      hostname: isProd ? "0.0.0.0" : (process.env.HOST || "localhost"),
       port: PORT,
       http3: true, 
       http2: true, 
