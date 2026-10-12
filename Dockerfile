@@ -1,4 +1,4 @@
-FROM docker.io/oven/bun:1 AS deps
+FROM docker.io/oven/bun:latest AS deps
 WORKDIR /app
 
 RUN apt-get update \
@@ -8,7 +8,7 @@ RUN apt-get update \
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-FROM docker.io/oven/bun:1-slim AS runtime
+FROM docker.io/oven/bun:latest-slim AS runtime
 WORKDIR /app
 
 ENV PORT=3000 \
