@@ -15,6 +15,11 @@ services:
         source: ./data,
         target: /app/data
       }
+      - {
+        type: bind,
+        source: ./data/certs,
+        target: /app/certs
+      }
     healthcheck:
       test: ["CMD", "wget", "--spider", "--no-check-certificate", "https://localhost:3000"]
       interval: 30s
