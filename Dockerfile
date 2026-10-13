@@ -19,6 +19,7 @@ COPY --from=deps /app/node_modules ./node_modules
 
 COPY . .
 
+RUN mkdir -p /app/data/certs
 RUN openssl req -x509 -newkey rsa:2048 -nodes -keyout /app/data/certs/key.pem -out /app/data/certs/cert.pem -days 365 -subj "/CN=localhost"
 
 EXPOSE 3000
