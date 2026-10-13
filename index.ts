@@ -12,6 +12,8 @@ logger.info({
   dataFolderPermission: fs.statSync('./data').mode.toString(8),
   pwd: process.cwd(),
   certsFolderExists: fs.existsSync('./data/certs'),
+  keyFileExists: fs.existsSync('./data/certs/key.pem'),
+  certFileExists: fs.existsSync('./data/certs/cert.pem'),
 }, 'Starting application');
 
 const db = $dbManager.registerDatabase('main', {
