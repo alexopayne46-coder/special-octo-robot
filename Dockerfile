@@ -19,7 +19,7 @@ COPY --from=deps /app/node_modules ./node_modules
 
 COPY . .
 
-RUN mkdir -p /app/data && chown -R bun:bun /app
+RUN chown -R bun:bun /app
 
 USER bun
 
