@@ -5,13 +5,16 @@ services:
       dockerfile: Dockerfile
     container_name: ton-app
     restart: unless-stopped
-    userns_mode: "keep-id"
+    #userns_mode: "keep-id"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - NODE_ENV=production
     volumes:
-      # Persist SQLite database (and certs, if they live in ./data)
-      - ./data:/app/data
+      - {
+        type: bind,
+        source: ./data,
+        target: /app/data
+      }
     healthcheck:
       # app serves HTTPS now, so use https and skip cert verification
       test: ["CMD", "wget", "--spider", "--no-check-certificate", "https://localhost:3000"]
@@ -33,7 +36,6 @@ services:
     volumes:
       - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./data/certs:/etc/nginx/certs:ro
-      - ./data:/app/data
     depends_on:
       app:
         condition: service_healthy
