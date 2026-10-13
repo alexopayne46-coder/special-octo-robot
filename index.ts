@@ -2,6 +2,14 @@ import './src/core/autolock';
 
 import { $dbManager } from './src/core/index.js';
 import { runMigrations } from './src/schema/index.js';
+import { logger } from './src/core/logger.js';
+import fs from 'fs';
+
+logger.info({
+  time: new Date().toISOString(),
+  env: process.env.NODE_ENV || 'development',
+  dataFolderPermission: fs.statSync('./data').mode.toString(8)
+}, 'Starting application');
 
 const db = $dbManager.registerDatabase('main', {
   path: './data/app.db',
