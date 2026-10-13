@@ -23,12 +23,12 @@ const db = $dbManager.registerDatabase('main', {
 
 runMigrations(db);
 
-import { WebkitServer } from './webkit';
-const webkitServer = new WebkitServer();
-
 import { $hypervisorLayer } from './src/core/hypervisor.layer.js';
 await $hypervisorLayer.autoload();
 
 
 import { $campaignLayer } from './src/core/campaign.layer.js';
 await $campaignLayer.start();
+
+import { WebkitServer } from './webkit';
+const webkitServer = new WebkitServer();
