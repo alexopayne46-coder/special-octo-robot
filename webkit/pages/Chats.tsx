@@ -168,11 +168,7 @@ export default function Chats() {
                 Chats appear here automatically once your account starts receiving
                 or syncing conversations. You can then sort them into groups.
               </p>
-              <ul className="mt-6 text-left text-sm text-gray-500 space-y-2">
-                <li>• Make sure the backend is connected and running</li>
-                <li>• Check that your account has at least one active conversation</li>
-                <li>• Press refresh to load the latest data</li>
-              </ul>
+             
               <button
                 className="btn btn-sm btn-outline mt-8 bg-white"
                 onClick={() => refetch()}

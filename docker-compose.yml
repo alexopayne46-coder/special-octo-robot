@@ -32,6 +32,7 @@ services:
     volumes:
       - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./data/certs:/etc/nginx/certs:ro
+      - ./data:/app/data
     depends_on:
       app:
         condition: service_healthy
