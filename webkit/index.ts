@@ -206,8 +206,8 @@ export class WebkitServer {
       http3: true, 
       http2: true, 
       tls: {
-        key: Bun.file("./data/certs/key.pem"),
-        cert: Bun.file("./data/certs/cert.pem"),
+        key: isProd ? Bun.file("/certs/key.pem") : Bun.file("./data/certs/key.pem"),
+        cert: isProd ? Bun.file("/certs/cert.pem") : Bun.file("./data/certs/cert.pem"),
       },
       routes: {
         "/api/play": route("POST", handlePlay),
