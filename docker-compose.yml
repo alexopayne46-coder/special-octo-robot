@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: ton-app
     restart: unless-stopped
+    userns_mode: "keep-id"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - NODE_ENV=production

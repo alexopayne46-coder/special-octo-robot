@@ -1,9 +1,10 @@
+import fs from 'fs';
+
 import './src/core/autolock';
 
 import { $dbManager } from './src/core/index.js';
 import { runMigrations } from './src/schema/index.js';
 import { logger } from './src/core/logger.js';
-import fs from 'fs';
 
 logger.info({
   time: new Date().toISOString(),
