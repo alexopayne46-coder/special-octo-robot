@@ -2,17 +2,9 @@ import { serve } from "bun";
 import index from "./index.html";
 import { logger } from "../src/core/logger";
 import { HttpPlayAdapter } from "../src/adapters/http-play/adapter";
-
-
-const isProd = process.env.NODE_ENV === "production";
-const PORT = Number(process.env.PORT ?? 3000);
-const MAX_JSON_BYTES = 1 * 1024 * 1024;
-const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
-const SHUTDOWN_TIMEOUT_MS = 10_000;
+import { isProd, PORT, MAX_JSON_BYTES, MAX_IMPORT_BYTES, SHUTDOWN_TIMEOUT_MS, tlsBun, HOST } from "../src/config";
 
 const httpPlayAdapter = new HttpPlayAdapter();
-
-
 
 class AppError extends Error {
   constructor(
@@ -201,14 +193,11 @@ export class WebkitServer {
 
   constructor() {
     this.server = serve({
-      hostname: isProd ? "0.0.0.0" : (process.env.HOST || "localhost"),
+      hostname: HOST,
       port: PORT,
       http3: true, 
       http2: true, 
-      tls: {
-        key: isProd ? Bun.file("/certs/key.pem") : Bun.file("./data/certs/key.pem"),
-        cert: isProd ? Bun.file("/certs/cert.pem") : Bun.file("./data/certs/cert.pem"),
-      },
+      tls: tlsBun,
       routes: {
         "/api/play": route("POST", handlePlay),
         "/api/import": route("POST", handleImport),
