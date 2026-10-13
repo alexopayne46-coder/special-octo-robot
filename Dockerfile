@@ -19,9 +19,5 @@ COPY --from=deps /app/node_modules ./node_modules
 
 COPY . .
 
-RUN chown -R bun:bun /app
-
-USER bun
-
 EXPOSE 3000
 CMD ["bun", "run", "index.ts"]

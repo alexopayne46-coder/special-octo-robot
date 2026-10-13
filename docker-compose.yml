@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: ton-app
     restart: unless-stopped
-    #userns_mode: "keep-id"
+    userns_mode: "keep-id"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - NODE_ENV=production
@@ -16,7 +16,6 @@ services:
         target: /app/data
       }
     healthcheck:
-      # app serves HTTPS now, so use https and skip cert verification
       test: ["CMD", "wget", "--spider", "--no-check-certificate", "https://localhost:3000"]
       interval: 30s
       timeout: 10s
