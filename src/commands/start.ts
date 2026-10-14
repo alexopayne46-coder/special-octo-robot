@@ -1,5 +1,6 @@
 import { Command, Args, Flags } from '@oclif/core';
 import { logger } from '../core/logger';
+import { WebKit } from '@/src/application/webkit';
 
 export default class StartCommand extends Command {
   static description = 'Start the TON bot server and all services';
@@ -33,7 +34,6 @@ export default class StartCommand extends Command {
     const { runMigrations } = await import('@/src/db/client.js');
     const { $mtOrchestration } = await import('@/src/application/orchestration.js');
     const { $campaignLayer } = await import('@/src/core/campaign.layer.js');
-    const { $webKitServer } = await import('@/webkit');
 
     if (flags.migrate) {
       logger.info('Running migrations...');
@@ -52,7 +52,8 @@ export default class StartCommand extends Command {
 
     if (flags.server) {
       logger.info(`Starting web server on ${flags.host}:${flags.port}...`);
-      await $webKitServer.start({ http3: flags.http3, tls: flags.tls });
+      const webkit = new WebKit({ tls: flags.tls, http3: flags.http3 });
+      await webkit.start({ tls: flags.tls, http3: flags.http3 });
     }
 
     logger.info('TON bot started successfully');
