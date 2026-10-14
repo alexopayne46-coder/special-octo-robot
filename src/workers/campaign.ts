@@ -6,13 +6,13 @@ import { CampaignWatcher } from '../core/campaign.watcher.js';
 import { CampaignLifecycleManager } from '../lifecycles/campaign.lifecycle.manager.js';
 import { WorkerRpcHostClient } from '../core/worker.rpc.js';
 import { logger } from '../core/logger.js';
-import type { IRClientInfo } from '../core/hypervisor.protocol.js';
+import type { MtAccountInfo } from '../application/mtclient.js';
 
 const host = new WorkerRpcHostClient();
 
 const watcher = new CampaignWatcher();
-const lifecycleManager = new CampaignLifecycleManager(watcher.dbPath, (addresses) =>
-  host.call<IRClientInfo[]>('getAccounts', { addresses })
+const lifecycleManager = new CampaignLifecycleManager((addresses) =>
+  host.call<MtAccountInfo[]>('getAccounts', { addresses })
 );
 
 watcher.setChangeListener((change) => lifecycleManager.handleChange(change));

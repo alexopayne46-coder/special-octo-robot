@@ -1,10 +1,10 @@
-import type { IRClientInfo } from '../core/hypervisor.protocol.js';
+import type { MtAccountInfo } from '../application/mtclient.js';
 
 export abstract class CampaignExecutor {
   private stopped = false;
   private destroyed = false;
 
-  public abstract onSpawn(accounts: IRClientInfo[], opts: Record<string, any>): Promise<void>;
+  public abstract onSpawn(accounts: MtAccountInfo[], opts: Record<string, any>): Promise<void>;
 
   public abstract onDestroy(): Promise<void>;
 

@@ -1,11 +1,8 @@
-import { existsSync } from 'fs';
 import { logger } from './logger.js';
-import { SQLiteDatabase } from './database.js';
 import { AdCampaignRepository } from '../models/ad-campaign.js';
 import type { AdCampaign } from '../models/ad-campaign.js';
 import type { CampaignSnapshot } from './campaign.protocol.js';
 
-const DEFAULT_DATABASE_PATH = './data/app.db';
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 const POLL_RETRIES = 3;
 const POLL_RETRY_DELAY_MS = 50;
@@ -25,8 +22,8 @@ export type CampaignChangeListener = (change: CampaignChange) => void;
  * Watches the `ad_campaigns` table and reports any change
  * (creation, status transitions, updates, deletions) to the terminal.
  *
- * Runs inside the campaign worker and owns its own read-only
- * database connection, so it never interferes with main-thread writes.
+ * Runs inside the campaign worker and shares the application's
+ * PostgreSQL pool, so it never interferes with main-thread writes.
  */
 export class CampaignWatcher {
   private repo: AdCampaignRepository | null = null;
@@ -38,13 +35,8 @@ export class CampaignWatcher {
   private changeListener: CampaignChangeListener | null = null;
 
   constructor(
-    private readonly databasePath: string = DEFAULT_DATABASE_PATH,
     private readonly pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
   ) {}
-
-  public get dbPath(): string {
-    return this.databasePath;
-  }
 
   public isRunning(): boolean {
     return this.running;
@@ -59,7 +51,7 @@ export class CampaignWatcher {
     this.running = true;
 
     logger.info(
-      { dbPath: this.databasePath, pollIntervalMs: this.pollIntervalMs },
+      { pollIntervalMs: this.pollIntervalMs },
       'Campaign watcher started'
     );
 
@@ -90,32 +82,17 @@ export class CampaignWatcher {
       }));
   }
 
-  private ensureRepo(): AdCampaignRepository | null {
-    if (this.repo) return this.repo;
-
-    // database may still be initializing on the main thread — retry until it exists
-    if (!existsSync(this.databasePath)) {
-      this.logWaiting();
-      return null;
+  private ensureRepo(): AdCampaignRepository {
+    if (!this.repo) {
+      this.repo = new AdCampaignRepository();
     }
-
-    try {
-      this.repo = new AdCampaignRepository(
-        new SQLiteDatabase({ path: this.databasePath, readonly: true })
-      );
-      logger.info(`Campaign watcher connected to ${this.databasePath}`);
-    } catch (error) {
-      logger.error({ err: error }, 'Campaign watcher failed to open database');
-      return null;
-    }
-
     return this.repo;
   }
 
-  private logWaiting(): void {
+  private logWaiting(message: string): void {
     if (this.waitingLogged) return;
     this.waitingLogged = true;
-    logger.info(`Campaign watcher waiting for database at ${this.databasePath}`);
+    logger.info(message);
   }
 
   private logWatching(): void {
@@ -128,7 +105,6 @@ export class CampaignWatcher {
     if (!this.running) return;
 
     const repo = this.ensureRepo();
-    if (!repo) return;
 
     let campaigns: AdCampaign[] | undefined;
     for (let attempt = 1; attempt <= POLL_RETRIES; attempt++) {
@@ -136,9 +112,10 @@ export class CampaignWatcher {
         campaigns = await repo.getAllCampaigns();
         break;
       } catch (error) {
-        // table is not migrated yet, or the database is briefly locked
+        // table is not migrated yet, or PostgreSQL is briefly unreachable
         if (attempt === POLL_RETRIES) {
-          this.logWaiting();
+          this.logWaiting('Campaign watcher is waiting for the database');
+          logger.debug({ err: error }, 'Campaign watcher poll failed');
           return;
         }
         await delay(POLL_RETRY_DELAY_MS);

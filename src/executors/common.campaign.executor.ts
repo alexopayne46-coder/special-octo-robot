@@ -1,6 +1,6 @@
 import { CampaignExecutor } from './campaign.executor.js';
 import { logger } from '../core/logger.js';
-import type { IRClientInfo } from '../core/hypervisor.protocol.js';
+import type { MtAccountInfo } from '../application/mtclient.js';
 import type { ArtifactSubmit } from '../lifecycles/campaign.lifecycle.js';
 
 const DEFAULT_STEPS = 5;
@@ -18,7 +18,7 @@ export class CommonCampaignExecutor extends CampaignExecutor {
     super();
   }
 
-  public async onSpawn(accounts: IRClientInfo[], opts: Record<string, any>): Promise<void> {
+  public async onSpawn(accounts: MtAccountInfo[], opts: Record<string, any>): Promise<void> {
     if (accounts.length === 0) {
       throw new Error('no accounts available from hypervisor');
     }

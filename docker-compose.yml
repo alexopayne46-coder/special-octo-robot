@@ -8,6 +8,7 @@ services:
     userns_mode: "keep-id"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=postgres://pg:pg@postgres:5432/pg
       - NODE_ENV=production
     volumes:
       - {
@@ -26,6 +27,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  postgres:
+    image: docker.io/postgres:18-alpine
+    container_name: ton-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=pg
+      - POSTGRES_PASSWORD=pg
+      - POSTGRES_DB=pg
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pg -d pg"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     networks:
       - app-network
 
@@ -49,3 +71,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres-data:

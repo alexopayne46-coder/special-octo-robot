@@ -13,6 +13,8 @@ const LookALikeUsers = lazy(() => import("./pages/LookALikeUsers"));
 const Import = lazy(() => import("./pages/Import"));
 const AdCampaignMaster = lazy(() => import("./pages/AdCampaignMaster"));
 const CampaignArtifacts = lazy(() => import("./pages/CampaignArtifacts"));
+const Proxies = lazy(() => import("./pages/Proxies"));
+const Accounts = lazy(() => import("./pages/Accounts"));
 
 type RouteConfig = {
   component: LazyExoticComponent<ComponentType<any>>;
@@ -65,6 +67,14 @@ const routerMapper: Record<string, RouteConfig> = {
   "/application/campaigns/:campaignId/artifacts": {
     component: CampaignArtifacts,
     breadcrumbs: [{ label: "Campaigns", href: "/application/campaigns" }],
+  },
+  "/application/proxies": {
+    component: Proxies,
+    breadcrumbs: [{ label: "Proxies", href: "/application/proxies" }],
+  },
+  "/application/accounts": {
+    component: Accounts,
+    breadcrumbs: [{ label: "Accounts", href: "/application/accounts" }],
   },
 };
 

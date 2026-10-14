@@ -158,17 +158,22 @@ const handleImport: RouteHandler = async (req, { log }) => {
   const clearBeforeImport = formData.get("clearBeforeImport") === "true";
   const rawGroupName = formData.get("groupName");
   const groupName = typeof rawGroupName === "string" ? rawGroupName : undefined;
+  const rawProxyId = formData.get("proxyId");
+  const proxyId =
+    typeof rawProxyId === "string" && rawProxyId.trim() !== "" && Number.isFinite(Number(rawProxyId))
+      ? Number(rawProxyId)
+      : undefined;
 
   log.info(
-    { importType, clearBeforeImport, groupName, fileName: file.name, fileSize: file.size },
+    { importType, clearBeforeImport, groupName, proxyId, fileName: file.name, fileSize: file.size },
     "processing /api/import"
   );
 
-  return httpPlayAdapter.handleImport(file, importType, clearBeforeImport, groupName);
+  return httpPlayAdapter.handleImport(file, importType, clearBeforeImport, groupName, proxyId);
 };
 
 export class WebkitServer {
-  private server: ReturnType<typeof serve>;
+  private server: ReturnType<typeof serve> | undefined;
   private shuttingDown = false;
 
   async shutdown(signal: string, exitCode = 0) {
@@ -182,7 +187,7 @@ export class WebkitServer {
     }, SHUTDOWN_TIMEOUT_MS).unref();
 
     try {
-      await this.server.stop();
+      await this.server?.stop();
       logger.info("server stopped");
     } catch (err) {
       logger.error({ err }, "error while stopping server");
@@ -192,11 +197,15 @@ export class WebkitServer {
   }
 
   constructor() {
+
+  }
+
+  async start() {
     this.server = serve({
       hostname: HOST,
       port: PORT,
-      http3: true, 
-      http2: true, 
+      http3: true,
+      http2: true,
       tls: tlsBun,
       routes: {
         "/api/play": route("POST", handlePlay),
@@ -217,22 +226,14 @@ export class WebkitServer {
       },
     });
 
-
     logger.info({ url: this.server.url.toString(), env: process.env.NODE_ENV ?? "development" }, "server running");
 
     process.on("SIGINT", () => void this.shutdown("SIGINT"));
     process.on("SIGTERM", () => void this.shutdown("SIGTERM"));
-
-    process.on("unhandledRejection", (reason) => {
-      logger.error({ err: reason }, "unhandled promise rejection");
-    });
-
-    process.on("uncaughtException", (err) => {
-      logger.fatal({ err }, "uncaught exception");
-      void this.shutdown("uncaughtException", 1);
-    });
   }
 }
+
+export const $webKitServer = new WebkitServer()
 
 
 

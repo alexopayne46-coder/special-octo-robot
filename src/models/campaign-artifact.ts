@@ -1,112 +1,79 @@
-import { BaseEntity, BaseRepository } from '../core/repository.js';
-import { SQLiteDatabase } from '../core/database.js';
+import { asc, count, eq, type InferSelectModel } from 'drizzle-orm';
+import { getDb } from '../db/client.js';
+import { campaignArtifacts } from '../db/schema.js';
 
 export const ARTIFACT_MOODS = ['positive', 'negative', 'neutral'] as const;
 export type ArtifactMood = (typeof ARTIFACT_MOODS)[number];
 
-export interface CampaignArtifact extends BaseEntity {
-  campaignId: number;
-  text: string;
+export interface CampaignArtifact extends InferSelectModel<typeof campaignArtifacts> {
   mood: ArtifactMood;
-  payload: Record<string, any>;
 }
 
 export type CampaignArtifactCreate = Omit<CampaignArtifact, 'id' | 'createdAt' | 'updatedAt'>;
 
 export type CampaignArtifactUpdate = Partial<CampaignArtifactCreate>;
 
-export class CampaignArtifactRepository extends BaseRepository<CampaignArtifact> {
-  constructor(db: SQLiteDatabase) {
-    super(db, 'campaign_artifacts');
-  }
+export class CampaignArtifactRepository {
+  constructor() {}
 
   async getByCampaign(campaignId: number, limit?: number): Promise<CampaignArtifact[]> {
-    const rows = await this.db.query<any>(
-      `SELECT * FROM ${this.tableName} WHERE campaignId = ? ORDER BY id ASC LIMIT ?`,
-      [campaignId, limit ?? Number.MAX_SAFE_INTEGER]
-    );
-    return rows.map((row) => this.parseRow(row));
+    const query = getDb()
+      .select()
+      .from(campaignArtifacts)
+      .where(eq(campaignArtifacts.campaignId, campaignId))
+      .orderBy(asc(campaignArtifacts.id));
+
+    const rows = limit === undefined ? await query : await query.limit(limit);
+    return rows as CampaignArtifact[];
   }
 
   async getById(id: number): Promise<CampaignArtifact | null> {
-    const row = await this.db.queryOne<any>(`SELECT * FROM ${this.tableName} WHERE id = ?`, [id]);
-    return row ? this.parseRow(row) : null;
+    const rows = await getDb().select().from(campaignArtifacts).where(eq(campaignArtifacts.id, id)).limit(1);
+    const row = rows[0];
+    return row ? (row as CampaignArtifact) : null;
   }
 
   async createArtifact(data: CampaignArtifactCreate): Promise<number> {
-    const now = new Date().toISOString();
+    const rows = await getDb()
+      .insert(campaignArtifacts)
+      .values({
+        campaignId: data.campaignId,
+        text: data.text,
+        mood: data.mood ?? 'neutral',
+        payload: data.payload ?? {},
+      })
+      .returning({ id: campaignArtifacts.id });
 
-    const sql = `
-      INSERT INTO ${this.tableName}
-      (campaignId, text, mood, payload, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    this.db.execute(sql, [
-      data.campaignId,
-      data.text,
-      data.mood ?? 'neutral',
-      JSON.stringify(data.payload ?? {}),
-      now,
-      now,
-    ]);
-
-    return this.lastInsertId();
+    return rows[0].id;
   }
 
   async updateArtifact(id: number, updates: CampaignArtifactUpdate): Promise<void> {
     if (Object.keys(updates).length === 0) return;
 
-    const now = new Date().toISOString();
-    const fields = Object.keys(updates);
-    const setClause = fields.map((field) => `${field} = ?`).join(', ');
-    const values = fields.map((field) => this.serialize(field, updates[field as keyof CampaignArtifactUpdate]));
+    const data = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    ) as Partial<CampaignArtifactCreate>;
 
-    const sql = `UPDATE ${this.tableName} SET ${setClause}, updatedAt = ? WHERE id = ?`;
-    this.db.execute(sql, [...values, now, id]);
+    await getDb()
+      .update(campaignArtifacts)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(campaignArtifacts.id, id));
   }
 
   async deleteByCampaign(campaignId: number): Promise<void> {
-    const sql = `DELETE FROM ${this.tableName} WHERE campaignId = ?`;
-    this.db.execute(sql, [campaignId]);
+    await getDb().delete(campaignArtifacts).where(eq(campaignArtifacts.campaignId, campaignId));
   }
 
   async deleteById(id: number): Promise<void> {
-    const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
-    this.db.execute(sql, [id]);
+    await getDb().delete(campaignArtifacts).where(eq(campaignArtifacts.id, id));
   }
 
   async countByCampaign(campaignId: number): Promise<number> {
-    const sql = `SELECT COUNT(*) as count FROM ${this.tableName} WHERE campaignId = ?`;
-    const result = await this.db.queryOne<{ count: number }>(sql, [campaignId]);
-    return result?.count ?? 0;
-  }
+    const result = await getDb()
+      .select({ count: count() })
+      .from(campaignArtifacts)
+      .where(eq(campaignArtifacts.campaignId, campaignId));
 
-  private async lastInsertId(): Promise<number> {
-    const result = await this.db.queryOne<{ rowid: number }>('SELECT last_insert_rowid() AS rowid', []);
-    return result?.rowid ?? 0;
-  }
-
-  private serialize(field: string, value: unknown): any {
-    if (field === 'payload') {
-      return JSON.stringify(value);
-    }
-    return value;
-  }
-
-  private parseRow(row: any): CampaignArtifact {
-    return {
-      ...row,
-      payload: this.parseJSON(row.payload, {}),
-    };
-  }
-
-  private parseJSON(value: string | null | undefined, fallback: any): any {
-    if (!value) return fallback;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return fallback;
-    }
+    return Number(result[0]?.count ?? 0);
   }
 }

@@ -7,6 +7,14 @@ interface ChatGroupInfo {
   chatCount: number;
 }
 
+interface ProxyLite {
+  id: number;
+  name: string;
+  type: string;
+  host: string;
+  port: number;
+}
+
 const NEW_GROUP = "__new__";
 
 export default function Import() {
@@ -15,19 +23,24 @@ export default function Import() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [author, setAuthor] = useState("");
   const [clearBeforeImport, setClearBeforeImport] = useState(false);
   const [groupSelection, setGroupSelection] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [proxySelection, setProxySelection] = useState("");
 
   const isChatsCsv = selectedOption === "chats-csv";
+  const isTdataAccount = selectedOption === "tdata-account";
 
   const { data: groups } = useBackendPack<ChatGroupInfo[]>(
     "ChatGroups",
     {},
     { enabled: isChatsCsv, errorMessage: "Failed to load groups" }
+  );
+
+  const { data: proxies } = useBackendPack<ProxyLite[]>(
+    "Proxies",
+    {},
+    { enabled: isTdataAccount, errorMessage: "Failed to load proxies" }
   );
 
   const getGroupName = (): string | undefined => {
@@ -62,6 +75,9 @@ export default function Import() {
       const groupName = getGroupName();
       if (groupName) {
         formData.append("groupName", groupName);
+      }
+      if (isTdataAccount && proxySelection) {
+        formData.append("proxyId", proxySelection);
       }
 
       const response = await fetch("/api/import", {
@@ -131,6 +147,24 @@ export default function Import() {
                   />
                 </label>
               )}
+            </>
+          )}
+
+          {isTdataAccount && (
+            <>
+              <label className="label">Proxy</label>
+              <select
+                className="select"
+                value={proxySelection}
+                onChange={(e) => setProxySelection(e.target.value)}
+              >
+                <option value="">Direct connection</option>
+                {(proxies ?? []).map((proxy) => (
+                  <option key={proxy.id} value={String(proxy.id)}>
+                    {proxy.name} ({proxy.type}) — {proxy.host}:{proxy.port}
+                  </option>
+                ))}
+              </select>
             </>
           )}
 

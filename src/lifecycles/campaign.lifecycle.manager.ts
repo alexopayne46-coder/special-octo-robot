@@ -1,6 +1,4 @@
-import { existsSync } from 'fs';
 import { logger } from '../core/logger.js';
-import { SQLiteDatabase } from '../core/database.js';
 import { AdCampaignRepository } from '../models/ad-campaign.js';
 import { CampaignArtifactRepository } from '../models/campaign-artifact.js';
 import { CAMPAIGN_LIFECYCLES } from './campaign.lifecycle.registry.js';
@@ -19,7 +17,6 @@ export class CampaignLifecycleManager {
   private artifactRepo: CampaignArtifactRepository | null = null;
 
   constructor(
-    private readonly databasePath: string,
     private readonly fetchAccounts: AccountFetcher,
   ) {}
 
@@ -160,36 +157,20 @@ export class CampaignLifecycleManager {
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  private ensureRepo(): AdCampaignRepository | null {
+  private ensureRepo(): AdCampaignRepository {
     if (this.repo) return this.repo;
 
-    if (!existsSync(this.databasePath)) return null;
-
-    try {
-      this.repo = new AdCampaignRepository(new SQLiteDatabase({ path: this.databasePath }));
-      logger.info(`Campaign lifecycle manager connected to ${this.databasePath}`);
-    } catch (error) {
-      logger.error({ err: error }, 'Campaign lifecycle manager failed to open database');
-      return null;
-    }
+    this.repo = new AdCampaignRepository();
+    logger.info('Campaign lifecycle manager connected to ad_campaigns');
 
     return this.repo;
   }
 
-  private ensureArtifactRepo(): CampaignArtifactRepository | null {
+  private ensureArtifactRepo(): CampaignArtifactRepository {
     if (this.artifactRepo) return this.artifactRepo;
 
-    if (!existsSync(this.databasePath)) return null;
-
-    try {
-      this.artifactRepo = new CampaignArtifactRepository(
-        new SQLiteDatabase({ path: this.databasePath })
-      );
-      logger.info('Campaign lifecycle manager connected to campaign_artifacts');
-    } catch (error) {
-      logger.error({ err: error }, 'Campaign lifecycle manager failed to open artifacts storage');
-      return null;
-    }
+    this.artifactRepo = new CampaignArtifactRepository();
+    logger.info('Campaign lifecycle manager connected to campaign_artifacts');
 
     return this.artifactRepo;
   }

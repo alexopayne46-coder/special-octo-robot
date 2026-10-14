@@ -1,5 +1,5 @@
 import { Telegraf, Context } from 'telegraf'
-import { $hypervisorLayer } from '../../core/hypervisor.layer.js'
+import { $mtOrchestration } from '../../application/orchestration.js'
 import { logger } from '../../core/logger.js'
 import * as fs from 'fs/promises'
 import * as path from 'path'
@@ -62,21 +62,21 @@ export class TelegramBotAdapter {
 
 
   private async handleHypervisors(ctx: Context): Promise<void> {
-    const addresses = await $hypervisorLayer.getAllIRCAddresses()
+    const addresses = $mtOrchestration.getAllAddresses()
 
     if (addresses.length === 0) {
-      await ctx.reply('No hypervisor clients are currently loaded.')
+      await ctx.reply('No clients are currently loaded.')
       return
     }
 
     const entries = await Promise.all(addresses.map((address) => this.formatClient(address)))
     const lines = entries.filter((entry): entry is string => entry !== null)
 
-    await ctx.reply(['Hypervisor Clients', '', ...lines].join('\n'))
+    await ctx.reply(['Clients', '', ...lines].join('\n'))
   }
 
-  private async formatClient(address: string): Promise<string | null> {
-    const client = await $hypervisorLayer.getIRClient(address)
+  private formatClient(address: string): string | null {
+    const client = $mtOrchestration.describeClient(address)
     if (!client?.me) return null
 
     return [
@@ -116,7 +116,7 @@ export class TelegramBotAdapter {
 
       await ctx.reply('Importing tdata...')
       const accountName = `import_${Date.now()}`
-      const address = await $hypervisorLayer.spawnIRClient(accountName, tdataPath, {})
+      const address = await $mtOrchestration.spawnClient(accountName, tdataPath, {})
 
       await ctx.reply(`Successfully imported account.\n\nAddress: ${address}`)
     } catch (error) {

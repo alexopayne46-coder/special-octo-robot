@@ -1,8 +1,8 @@
 import { logger } from './logger.js';
 import { WorkerRpcClient } from './worker.rpc.js';
-import { $hypervisorLayer } from './hypervisor.layer.js';
+import { $mtOrchestration } from '../application/orchestration.js';
 import type { CampaignLifecycleInfo, CampaignSnapshot, CampaignWatcherMethod } from './campaign.protocol.js';
-import type { IRClientInfo } from './hypervisor.protocol.js';
+import type { MtAccountInfo } from '../application/mtclient.js';
 
 const CAMPAIGN_WORKER_PATH = `${import.meta.dir}/../workers/campaign.ts`;
 
@@ -27,13 +27,13 @@ export class CampaignLayer extends WorkerRpcClient<CampaignWatcherMethod> {
     await this.start();
   }
 
-  private async getAccounts(params: { addresses?: string[] }): Promise<IRClientInfo[]> {
-    const all = await $hypervisorLayer.getAllIRClients();
+  private async getAccounts(params: { addresses?: string[] }): Promise<MtAccountInfo[]> {
+    const all = $mtOrchestration.describeAll();
     const addresses = params?.addresses?.length ? params.addresses : Object.keys(all);
 
     return addresses
       .map((address) => all[address])
-      .filter((info): info is IRClientInfo => Boolean(info));
+      .filter((info): info is MtAccountInfo => Boolean(info));
   }
 
   public async start(): Promise<boolean> {

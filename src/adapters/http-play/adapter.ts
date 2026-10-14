@@ -1,11 +1,12 @@
-import { $hypervisorLayer } from '../../core/hypervisor.layer.js'
+import { $mtOrchestration, MtOrchestration } from '../../application/orchestration.js'
 import { logger } from '../../core/logger.js'
 import { ChatRepository } from '../../models/chat.js'
 import { ChatGroupRepository, ChatGroup } from '../../models/chat-group.js'
 import { LookALikeUserRepository } from '../../models/lookalike-user.js'
 import { AdCampaignRepository, AdCampaignCreate, AdCampaignUpdate, CampaignType, CampaignStatus, CAMPAIGN_TYPES, CAMPAIGN_CREATE_STATUSES } from '../../models/ad-campaign.js'
 import { ARTIFACT_MOODS, ArtifactMood, CampaignArtifactCreate, CampaignArtifactRepository, CampaignArtifactUpdate } from '../../models/campaign-artifact.js'
-import { $dbManager } from '../../core/index.js'
+import { AccountRepository, AccountUpdate, AccountWithProxy } from '../../models/account.js'
+import { ProxyRepository, PROXY_TYPES, Proxy, ProxyType, ProxyUpdate } from '../../models/proxy.js'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { randomBytes } from 'crypto'
@@ -179,6 +180,8 @@ export class HttpPlayAdapter {
   private lookalikeRepo: LookALikeUserRepository | null = null
   private adCampaignRepo: AdCampaignRepository | null = null
   private artifactRepo: CampaignArtifactRepository | null = null
+  private proxyRepo: ProxyRepository | null = null
+  private accountRepo: AccountRepository | null = null
 
   constructor() {
     this.registerHandlers()
@@ -186,57 +189,51 @@ export class HttpPlayAdapter {
 
   private getChatRepo(): ChatRepository {
     if (!this.chatRepo) {
-      const db = $dbManager.getDatabase('main')
-      if (!db) {
-        throw new Error('Database not initialized')
-      }
-      this.chatRepo = new ChatRepository(db)
+      this.chatRepo = new ChatRepository()
     }
     return this.chatRepo
   }
 
   private getChatGroupRepo(): ChatGroupRepository {
     if (!this.chatGroupRepo) {
-      const db = $dbManager.getDatabase('main')
-      if (!db) {
-        throw new Error('Database not initialized')
-      }
-      this.chatGroupRepo = new ChatGroupRepository(db)
+      this.chatGroupRepo = new ChatGroupRepository()
     }
     return this.chatGroupRepo
   }
 
   private getLookalikeRepo(): LookALikeUserRepository {
     if (!this.lookalikeRepo) {
-      const db = $dbManager.getDatabase('main')
-      if (!db) {
-        throw new Error('Database not initialized')
-      }
-      this.lookalikeRepo = new LookALikeUserRepository(db)
+      this.lookalikeRepo = new LookALikeUserRepository()
     }
     return this.lookalikeRepo
   }
 
   private getAdCampaignRepo(): AdCampaignRepository {
     if (!this.adCampaignRepo) {
-      const db = $dbManager.getDatabase('main')
-      if (!db) {
-        throw new Error('Database not initialized')
-      }
-      this.adCampaignRepo = new AdCampaignRepository(db)
+      this.adCampaignRepo = new AdCampaignRepository()
     }
     return this.adCampaignRepo
   }
 
   private getArtifactRepo(): CampaignArtifactRepository {
     if (!this.artifactRepo) {
-      const db = $dbManager.getDatabase('main')
-      if (!db) {
-        throw new Error('Database not initialized')
-      }
-      this.artifactRepo = new CampaignArtifactRepository(db)
+      this.artifactRepo = new CampaignArtifactRepository()
     }
     return this.artifactRepo
+  }
+
+  private getProxyRepo(): ProxyRepository {
+    if (!this.proxyRepo) {
+      this.proxyRepo = new ProxyRepository()
+    }
+    return this.proxyRepo
+  }
+
+  private getAccountRepo(): AccountRepository {
+    if (!this.accountRepo) {
+      this.accountRepo = new AccountRepository()
+    }
+    return this.accountRepo
   }
 
   private registerHandlers(): void {
@@ -259,10 +256,22 @@ export class HttpPlayAdapter {
     this.handlers.set('CampaignArtifactUpdate', this.handleCampaignArtifactUpdate.bind(this))
     this.handlers.set('CampaignArtifactDelete', this.handleCampaignArtifactDelete.bind(this))
     this.handlers.set('CampaignArtifactMeta', this.handleCampaignArtifactMeta.bind(this))
+    this.handlers.set('Proxies', this.handleProxies.bind(this))
+    this.handlers.set('ProxyGet', this.handleProxyGet.bind(this))
+    this.handlers.set('ProxyCreate', this.handleProxyCreate.bind(this))
+    this.handlers.set('ProxyUpdate', this.handleProxyUpdate.bind(this))
+    this.handlers.set('ProxyDelete', this.handleProxyDelete.bind(this))
+    this.handlers.set('ProxyMeta', this.handleProxyMeta.bind(this))
+    this.handlers.set('Accounts', this.handleAccounts.bind(this))
+    this.handlers.set('AccountGet', this.handleAccountGet.bind(this))
+    this.handlers.set('AccountCreate', this.handleAccountCreate.bind(this))
+    this.handlers.set('AccountUpdate', this.handleAccountUpdate.bind(this))
+    this.handlers.set('AccountDelete', this.handleAccountDelete.bind(this))
+    this.handlers.set('AccountSpawn', this.handleAccountSpawn.bind(this))
   }
 
   private async handleHypervisorInfo(args: Record<string, any>): Promise<any> {
-    const clients = await $hypervisorLayer.getAllIRClients()
+    const clients = $mtOrchestration.describeAll()
 
     return Object.entries(clients).map(([address, client]) => ({
       id: address,
@@ -462,6 +471,324 @@ export class HttpPlayAdapter {
     }
   }
 
+  private maskProxy(proxy: Proxy): Record<string, any> {
+    return { ...proxy, password: proxy.password === null ? null : '********' }
+  }
+
+  private parseProxyType(raw: unknown): ProxyType {
+    const type = typeof raw === 'string' ? raw.trim() : ''
+    if (!PROXY_TYPES.includes(type as ProxyType)) {
+      throw new Error(`Invalid proxy type: ${type || 'none'} (expected ${PROXY_TYPES.join(' or ')})`)
+    }
+    return type as ProxyType
+  }
+
+  private parseProxyPort(raw: unknown): number {
+    const port = Number(raw)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('Invalid proxy port (1-65535)')
+    }
+    return port
+  }
+
+  private parseProxyTextField(raw: unknown, field: string, maxLength = 253): string {
+    const value = typeof raw === 'string' ? raw.trim() : ''
+    if (!value) {
+      throw new Error(`${field} is required`)
+    }
+    if (value.length > maxLength) {
+      throw new Error(`${field} is too long`)
+    }
+    return value
+  }
+
+  private parseProxyRotationUrl(raw: unknown): string | null {
+    if (raw === undefined || raw === null || raw === '') return null
+    const value = String(raw).trim()
+    if (!value) return null
+    if (value.length > 2048) throw new Error('rotationUrl is too long')
+    return value
+  }
+
+  /** Optional text field: empty/absent becomes null. */
+  private parseProxyOptionalText(raw: unknown, field: string, maxLength = 253): string | null {
+    if (raw === undefined || raw === null) return null
+    const value = String(raw).trim()
+    if (!value) return null
+    if (value.length > maxLength) throw new Error(`${field} is too long`)
+    return value
+  }
+
+  private async handleProxies(args: Record<string, any>): Promise<any> {
+    const repo = this.getProxyRepo()
+    const proxies = await repo.getAllProxies()
+    return proxies.map((proxy) => this.maskProxy(proxy))
+  }
+
+  private async handleProxyGet(args: Record<string, any>): Promise<any> {
+    const repo = this.getProxyRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Proxy id is required')
+    }
+
+    const proxy = await repo.getProxyById(id)
+    if (!proxy) {
+      throw new Error('Proxy not found')
+    }
+
+    return this.maskProxy(proxy)
+  }
+
+  private async handleProxyCreate(args: Record<string, any>): Promise<any> {
+    const repo = this.getProxyRepo()
+
+    const name = this.parseProxyTextField(args.name, 'name', 64)
+    const existing = await repo.findByName(name)
+    if (existing) {
+      throw new Error(`Proxy "${name}" already exists`)
+    }
+
+    const id = await repo.createProxy({
+      type: this.parseProxyType(args.type),
+      name,
+      host: this.parseProxyTextField(args.host, 'host'),
+      port: this.parseProxyPort(args.port),
+      rotationUrl: this.parseProxyRotationUrl(args.rotationUrl),
+      username: this.parseProxyOptionalText(args.username, 'username', 128),
+      password: this.parseProxyOptionalText(args.password, 'password', 256),
+    })
+
+    logger.info({ id, name }, 'Proxy created')
+    return { success: true, id }
+  }
+
+  private async handleProxyUpdate(args: Record<string, any>): Promise<any> {
+    const repo = this.getProxyRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Proxy id is required')
+    }
+
+    const proxy = await repo.getProxyById(id)
+    if (!proxy) {
+      throw new Error('Proxy not found')
+    }
+
+    const updates: ProxyUpdate = {}
+    if (args.type !== undefined) {
+      updates.type = this.parseProxyType(args.type)
+    }
+    if (args.name !== undefined) {
+      const name = this.parseProxyTextField(args.name, 'name', 64)
+      if (name !== proxy.name) {
+        const existing = await repo.findByName(name)
+        if (existing && existing.id !== id) {
+          throw new Error(`Proxy "${name}" already exists`)
+        }
+      }
+      updates.name = name
+    }
+    if (args.host !== undefined) {
+      updates.host = this.parseProxyTextField(args.host, 'host')
+    }
+    if (args.port !== undefined) {
+      updates.port = this.parseProxyPort(args.port)
+    }
+    if (args.rotationUrl !== undefined) {
+      updates.rotationUrl = this.parseProxyRotationUrl(args.rotationUrl)
+    }
+    if (args.username !== undefined) {
+      updates.username = this.parseProxyOptionalText(args.username, 'username', 128)
+    }
+    // An empty password means "keep the current one" (form-friendly)
+    if (args.password !== undefined && String(args.password) !== '') {
+      updates.password = this.parseProxyTextField(args.password, 'password', 256)
+    }
+
+    await repo.updateProxy(id, updates)
+    logger.info({ id }, 'Proxy updated')
+    return { success: true, id }
+  }
+
+  private async handleProxyDelete(args: Record<string, any>): Promise<any> {
+    const repo = this.getProxyRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Proxy id is required')
+    }
+
+    const proxy = await repo.getProxyById(id)
+    if (!proxy) {
+      throw new Error('Proxy not found')
+    }
+
+    await repo.deleteById(id)
+    logger.info({ id }, 'Proxy deleted')
+    return { success: true, id }
+  }
+
+  private async handleProxyMeta(args: Record<string, any>): Promise<any> {
+    return {
+      types: [...PROXY_TYPES],
+    }
+  }
+
+  private describeAccount(account: AccountWithProxy): Record<string, any> {
+    const runtime = $mtOrchestration.describeClient(account.address)
+
+    return {
+      ...account,
+      proxy: account.proxy
+        ? { ...account.proxy }
+        : null,
+      loaded: Boolean(runtime),
+      me: runtime?.me ?? null,
+    }
+  }
+
+  private async handleAccounts(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+    const accounts = await repo.getAllAccounts()
+
+    if (args?.loadedOnly === true) {
+      return accounts
+        .filter((account) => $mtOrchestration.getClient(account.address))
+        .map((account) => this.describeAccount(account))
+    }
+
+    return accounts.map((account) => this.describeAccount(account))
+  }
+
+  private async handleAccountGet(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Account id is required')
+    }
+
+    const account = await repo.getAccountById(id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+
+    return this.describeAccount(account)
+  }
+
+  private async handleAccountCreate(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+
+    const name = this.parseProxyTextField(args.name, 'name', 64)
+    if (!/^[\w.\-]{1,64}$/.test(name)) {
+      throw new Error('Invalid account name (letters, digits, dot, dash, underscore only)')
+    }
+    if (await repo.findByName(name)) {
+      throw new Error(`Account "${name}" already exists`)
+    }
+
+    const proxyId = await this.resolveProxyId(args.proxyId)
+
+    const id = await repo.createAccount({
+      name,
+      address: MtOrchestration.addressFor(name),
+      tdataPath: this.parseProxyRotationUrl(args.tdataPath),
+      proxyId,
+      enabled: args.enabled === undefined ? true : Boolean(args.enabled),
+    })
+
+    logger.info({ id, name, proxyId }, 'Account registered')
+    return { success: true, id }
+  }
+
+  private async handleAccountUpdate(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Account id is required')
+    }
+
+    const account = await repo.getAccountById(id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+
+    const updates: AccountUpdate = {}
+    if (args.proxyId !== undefined) {
+      updates.proxyId = args.proxyId === null || args.proxyId === ''
+        ? null
+        : await this.resolveProxyId(args.proxyId)
+    }
+    if (args.enabled !== undefined) {
+      updates.enabled = Boolean(args.enabled)
+    }
+    if (args.tdataPath !== undefined) {
+      updates.tdataPath = this.parseProxyRotationUrl(args.tdataPath)
+    }
+
+    await repo.updateAccount(id, updates)
+    logger.info({ id }, 'Account updated')
+    return { success: true, id }
+  }
+
+  private async handleAccountDelete(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Account id is required')
+    }
+
+    const account = await repo.getAccountById(id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+
+    if ($mtOrchestration.getClient(account.address)) {
+      await $mtOrchestration.removeClient(account.address)
+    }
+
+    await repo.deleteById(id)
+    logger.info({ id, name: account.name }, 'Account deleted')
+    return { success: true, id }
+  }
+
+  private async handleAccountSpawn(args: Record<string, any>): Promise<any> {
+    const repo = this.getAccountRepo()
+    const id = Number(args.id)
+    if (!Number.isFinite(id)) {
+      throw new Error('Account id is required')
+    }
+
+    const account = await repo.getAccountById(id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+
+    if ($mtOrchestration.getClient(account.address)) {
+      return { success: true, address: account.address, alreadyLoaded: true }
+    }
+
+    const address = await $mtOrchestration.spawnClient(
+      account.name,
+      account.tdataPath ?? '',
+      { proxyId: account.proxyId ?? undefined },
+    )
+
+    return { success: true, address, alreadyLoaded: false }
+  }
+
+  private async resolveProxyId(raw: unknown): Promise<number | null> {
+    if (raw === undefined || raw === null || raw === '') return null
+    const id = Number(raw)
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error('Invalid proxyId')
+    }
+    const proxy = await this.getProxyRepo().getProxyById(id)
+    if (!proxy) {
+      throw new Error('Proxy not found')
+    }
+    return id
+  }
+
   private buildArtifactCreate(args: Record<string, any>): CampaignArtifactCreate {
     const campaignId = Number(args.campaignId)
     if (!Number.isFinite(campaignId)) {
@@ -551,17 +878,17 @@ export class HttpPlayAdapter {
     return raw.split(',').map((v) => v.trim()).filter(Boolean)
   }
 
-  public async handleImport(file: File, importType: string, clearBeforeImport?: boolean, groupName?: string): Promise<any> {
+  public async handleImport(file: File, importType: string, clearBeforeImport?: boolean, groupName?: string, proxyId?: number): Promise<any> {
     if (importType === 'chats-csv') {
       return this.handleChatsCSVImport(file, clearBeforeImport, groupName)
     }
     
+    const accountName = `import_${randomBytes(4).toString('hex')}`
+    const tdataDir = path.join(process.cwd(), 'tdata', accountName)
+
     try {
       const buffer = Buffer.from(await file.arrayBuffer())
 
-      const accountName = `import_${randomBytes(4).toString('hex')}`
-
-      const tdataDir = path.join(process.cwd(), 'tdata', accountName)
       await fs.mkdir(tdataDir, { recursive: true })
 
       const tdataPath = path.join(tdataDir, 'tdata')
@@ -581,9 +908,9 @@ export class HttpPlayAdapter {
 
       logger.info({ path: tdataPath, size: buffer.length }, 'TData file saved')
 
-      const address = await $hypervisorLayer.spawnIRClient(accountName, tdataPath, {})
+      const address = await $mtOrchestration.spawnClient(accountName, tdataPath, { proxyId })
 
-      logger.info({ address, accountName }, 'TData import successful')
+      logger.info({ address, accountName, proxyId }, 'TData import successful')
 
       return {
         success: true,
@@ -592,6 +919,8 @@ export class HttpPlayAdapter {
         accountName
       }
     } catch (error) {
+      // tdata is only removed after a successful import; clean up on failure
+      await fs.rm(path.join(process.cwd(), 'tdata', accountName), { recursive: true, force: true }).catch(() => {})
       logger.error({ error }, 'TData import failed')
       throw new Error(`TData import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }

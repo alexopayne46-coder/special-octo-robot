@@ -1,5 +1,8 @@
-import { BaseEntity, BaseRepository } from '../core/repository.js';
-import { SQLiteDatabase } from '../core/database.js';
+import { count, eq, type InferSelectModel } from 'drizzle-orm';
+import { getDb } from '../db/client.js';
+import { adCampaigns } from '../db/schema.js';
+
+export type { AdCampaignTime, AdCampaignPayload } from '../db/schema.js';
 
 export const CAMPAIGN_TYPES = ['SPM::SendToChats', 'Common::common'] as const;
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
@@ -10,95 +13,69 @@ export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 export const CAMPAIGN_CREATE_STATUSES = ['draft', 'scheduled'] as const;
 export type CampaignCreateStatus = (typeof CAMPAIGN_CREATE_STATUSES)[number];
 
-export interface AdCampaignTime {
-  startAt?: string;
-  endAt?: string;
-  asFastAsPossible: boolean;
-}
-
-export interface AdCampaignPayload {
-  [key: string]: any;
-}
-
-export interface AdCampaign extends BaseEntity {
-  name: string;
-  time: AdCampaignTime;
-  payload: AdCampaignPayload;
+export interface AdCampaign extends InferSelectModel<typeof adCampaigns> {
   campaignType: CampaignType;
   status: CampaignStatus;
-  addressesForCampaign: string[];
 }
 
 export type AdCampaignCreate = Omit<AdCampaign, 'id' | 'createdAt' | 'updatedAt'>;
 export type AdCampaignUpdate = Partial<AdCampaignCreate>;
 
-export class AdCampaignRepository extends BaseRepository<AdCampaign> {
-  constructor(db: SQLiteDatabase) {
-    super(db, 'ad_campaigns');
-  }
+export class AdCampaignRepository {
+  constructor() {}
 
   async getAllCampaigns(limit?: number): Promise<AdCampaign[]> {
-    const rows = await this.findAll(limit);
-    return rows.map((row) => this.parseRow(row));
+    const query = getDb().select().from(adCampaigns);
+    const rows = limit ? await query.limit(limit) : await query;
+    return rows as AdCampaign[];
   }
 
   async getCampaignById(id: number): Promise<AdCampaign | null> {
-    const sql = `SELECT * FROM ${this.tableName} WHERE id = ?`;
-    const row = await this.db.queryOne<any>(sql, [id]);
-    return row ? this.parseRow(row) : null;
+    const rows = await getDb().select().from(adCampaigns).where(eq(adCampaigns.id, id)).limit(1);
+    const row = rows[0];
+    return row ? (row as AdCampaign) : null;
   }
 
   async findByStatus(status: CampaignStatus): Promise<AdCampaign[]> {
-    const rows = await this.findManyBy({ status } as Partial<AdCampaign>);
-    return rows.map((row) => this.parseRow(row));
+    const rows = await getDb().select().from(adCampaigns).where(eq(adCampaigns.status, status));
+    return rows as AdCampaign[];
   }
 
   async createCampaign(data: AdCampaignCreate): Promise<number> {
-    const now = new Date().toISOString();
-    const time = JSON.stringify(data.time ?? { asFastAsPossible: true });
-    const payload = JSON.stringify(data.payload ?? {});
-    const addresses = JSON.stringify(data.addressesForCampaign ?? []);
+    const rows = await getDb()
+      .insert(adCampaigns)
+      .values({
+        name: data.name,
+        time: data.time ?? { asFastAsPossible: true },
+        payload: data.payload ?? {},
+        campaignType: data.campaignType,
+        status: data.status,
+        addressesForCampaign: data.addressesForCampaign ?? [],
+      })
+      .returning({ id: adCampaigns.id });
 
-    const sql = `
-      INSERT INTO ${this.tableName}
-      (name, time, payload, campaignType, status, addressesForCampaign, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    this.db.execute(sql, [
-      data.name,
-      time,
-      payload,
-      data.campaignType,
-      data.status,
-      addresses,
-      now,
-      now,
-    ]);
-
-    return this.lastInsertId();
+    return rows[0].id;
   }
 
   async updateCampaign(id: number, updates: AdCampaignUpdate): Promise<void> {
     if (Object.keys(updates).length === 0) return;
 
-    const now = new Date().toISOString();
-    const fields = Object.keys(updates);
-    const setClause = fields.map((field) => `${field} = ?`).join(', ');
-    const values = fields.map((field) => this.serialize(field, updates[field as keyof AdCampaignUpdate]));
+    const data = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    ) as Partial<AdCampaignCreate>;
 
-    const sql = `UPDATE ${this.tableName} SET ${setClause}, updatedAt = ? WHERE id = ?`;
-    this.db.execute(sql, [...values, now, id]);
+    await getDb()
+      .update(adCampaigns)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(adCampaigns.id, id));
   }
 
   async deleteById(id: number): Promise<void> {
-    const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
-    this.db.execute(sql, [id]);
+    await getDb().delete(adCampaigns).where(eq(adCampaigns.id, id));
   }
 
   async deleteAll(): Promise<void> {
-    const sql = `DELETE FROM ${this.tableName}`;
-    this.db.execute(sql, []);
+    await getDb().delete(adCampaigns);
   }
 
   async updateStatus(id: number, status: CampaignStatus): Promise<void> {
@@ -106,38 +83,7 @@ export class AdCampaignRepository extends BaseRepository<AdCampaign> {
   }
 
   async countAll(): Promise<number> {
-    const sql = `SELECT COUNT(*) as count FROM ${this.tableName}`;
-    const result = await this.db.queryOne<{ count: number }>(sql, []);
-    return result?.count ?? 0;
-  }
-
-  private async lastInsertId(): Promise<number> {
-    const result = await this.db.queryOne<{ rowid: number }>('SELECT last_insert_rowid() AS rowid', [])
-    return result?.rowid ?? 0
-  }
-
-  private serialize(field: string, value: unknown): any {
-    if (field === 'time' || field === 'payload' || field === 'addressesForCampaign') {
-      return JSON.stringify(value);
-    }
-    return value;
-  }
-
-  private parseRow(row: any): AdCampaign {
-    return {
-      ...row,
-      time: this.parseJSON(row.time, { asFastAsPossible: true }),
-      payload: this.parseJSON(row.payload, {}),
-      addressesForCampaign: this.parseJSON(row.addressesForCampaign, []),
-    };
-  }
-
-  private parseJSON(value: string | null | undefined, fallback: any): any {
-    if (!value) return fallback;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return fallback;
-    }
+    const result = await getDb().select({ count: count() }).from(adCampaigns);
+    return Number(result[0]?.count ?? 0);
   }
 }

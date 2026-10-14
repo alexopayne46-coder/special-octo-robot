@@ -1,11 +1,11 @@
 import { logger } from '../core/logger.js';
 import type { AdCampaign, CampaignStatus } from '../models/ad-campaign.js';
 import type { ArtifactMood } from '../models/campaign-artifact.js';
-import type { IRClientInfo } from '../core/hypervisor.protocol.js';
+import type { MtAccountInfo } from '../application/mtclient.js';
 
 export type StatusPersister = (status: CampaignStatus) => Promise<void>;
 
-export type AccountFetcher = (addresses: string[]) => Promise<IRClientInfo[]>;
+export type AccountFetcher = (addresses: string[]) => Promise<MtAccountInfo[]>;
 
 export interface ArtifactSubmit {
   text: string;

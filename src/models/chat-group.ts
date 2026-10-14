@@ -1,48 +1,54 @@
-import { BaseEntity, BaseRepository } from '../core/repository.js';
-import { SQLiteDatabase } from '../core/database.js';
+import { asc, count, eq, type InferSelectModel } from 'drizzle-orm';
+import { getDb } from '../db/client.js';
+import { chatGroups, chats } from '../db/schema.js';
 
-export interface ChatGroup extends BaseEntity {
-  name: string;
-}
+export interface ChatGroup extends InferSelectModel<typeof chatGroups> {}
 
 export interface ChatGroupWithCount extends ChatGroup {
   chatCount: number;
 }
 
-export class ChatGroupRepository extends BaseRepository<ChatGroup> {
-  constructor(db: SQLiteDatabase) {
-    super(db, 'chat_groups');
-  }
+export class ChatGroupRepository {
+  constructor() {}
 
   async getAllGroups(): Promise<ChatGroup[]> {
-    const sql = `SELECT * FROM ${this.tableName} ORDER BY name ASC`;
-    return this.db.query<ChatGroup>(sql);
+    return getDb().select().from(chatGroups).orderBy(asc(chatGroups.name));
   }
 
   async getAllGroupsWithChatCounts(): Promise<ChatGroupWithCount[]> {
-    const sql = `
-      SELECT g.*, COUNT(c.id) AS chatCount
-      FROM ${this.tableName} g
-      LEFT JOIN chats c ON c.groupId = g.id
-      GROUP BY g.id
-      ORDER BY g.name ASC
-    `;
-    return this.db.query<ChatGroupWithCount>(sql);
+    const rows = await getDb()
+      .select({
+        id: chatGroups.id,
+        name: chatGroups.name,
+        createdAt: chatGroups.createdAt,
+        updatedAt: chatGroups.updatedAt,
+        chatCount: count(chats.id),
+      })
+      .from(chatGroups)
+      .leftJoin(chats, eq(chats.groupId, chatGroups.id))
+      .groupBy(chatGroups.id)
+      .orderBy(asc(chatGroups.name));
+
+    return rows.map((row) => ({ ...row, chatCount: Number(row.chatCount) }));
   }
 
   async getGroupById(id: number): Promise<ChatGroup | null> {
-    return this.findOneBy({ id } as Partial<ChatGroup>);
+    const rows = await getDb().select().from(chatGroups).where(eq(chatGroups.id, id)).limit(1);
+    return rows[0] ?? null;
   }
 
   async findByName(name: string): Promise<ChatGroup | null> {
-    return this.findOneBy({ name } as Partial<ChatGroup>);
+    const rows = await getDb().select().from(chatGroups).where(eq(chatGroups.name, name)).limit(1);
+    return rows[0] ?? null;
   }
 
   async createGroup(name: string): Promise<number> {
-    const now = new Date().toISOString();
-    const sql = `INSERT INTO ${this.tableName} (name, createdAt, updatedAt) VALUES (?, ?, ?)`;
-    this.db.execute(sql, [name, now, now]);
-    return this.lastInsertId();
+    const rows = await getDb()
+      .insert(chatGroups)
+      .values({ name })
+      .returning({ id: chatGroups.id });
+
+    return rows[0].id;
   }
 
   async getOrCreateGroup(name: string): Promise<ChatGroup> {
@@ -55,22 +61,25 @@ export class ChatGroupRepository extends BaseRepository<ChatGroup> {
     if (existing) return existing;
 
     const id = await this.createGroup(trimmed);
-    return { id, name: trimmed };
+    const created = await this.getGroupById(id);
+    if (!created) {
+      throw new Error('Group creation failed');
+    }
+
+    return created;
   }
 
   async renameGroup(id: number, name: string): Promise<void> {
-    await this.update(id, { name: name.trim() });
+    await getDb()
+      .update(chatGroups)
+      .set({ name: name.trim(), updatedAt: new Date().toISOString() })
+      .where(eq(chatGroups.id, id));
   }
 
   async deleteGroup(id: number): Promise<void> {
-    const detachSql = `UPDATE chats SET groupId = NULL WHERE groupId = ?`;
-    this.db.execute(detachSql, [id]);
-    const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
-    this.db.execute(sql, [id]);
-  }
-
-  private async lastInsertId(): Promise<number> {
-    const result = await this.db.queryOne<{ rowid: number }>('SELECT last_insert_rowid() AS rowid', [])
-    return result?.rowid ?? 0
+    await getDb().transaction(async (tx) => {
+      await tx.update(chats).set({ groupId: null }).where(eq(chats.groupId, id));
+      await tx.delete(chatGroups).where(eq(chatGroups.id, id));
+    });
   }
 }

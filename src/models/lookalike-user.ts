@@ -1,61 +1,75 @@
-import { BaseEntity, BaseRepository } from '../core/repository.js';
-import { SQLiteDatabase } from '../core/database.js';
+import { and, eq, gt, type InferSelectModel } from 'drizzle-orm';
+import { getDb } from '../db/client.js';
+import { lookalikeUsers } from '../db/schema.js';
 
-export interface LookALikeUser extends BaseEntity {
-  chatSeen: string;
-  chatId: number;
-  peerId: number;
-  name: string;
-  username?: string;
-}
+export interface LookALikeUser extends InferSelectModel<typeof lookalikeUsers> {}
 
-export class LookALikeUserRepository extends BaseRepository<LookALikeUser> {
-  constructor(db: SQLiteDatabase) {
-    super(db, 'lookalike_users');
-  }
+export class LookALikeUserRepository {
+  constructor() {}
 
   async findByPeerId(peerId: number): Promise<LookALikeUser | null> {
-    return this.findOneBy({ peerId });
+    const rows = await getDb()
+      .select()
+      .from(lookalikeUsers)
+      .where(eq(lookalikeUsers.peerId, peerId))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async findByChatId(chatId: number, limit?: number): Promise<LookALikeUser[]> {
-    return this.findManyBy({ chatId } as Partial<LookALikeUser>, limit);
+    const query = getDb().select().from(lookalikeUsers).where(eq(lookalikeUsers.chatId, chatId));
+    return limit ? query.limit(limit) : query;
   }
 
   async findByUsername(username: string): Promise<LookALikeUser | null> {
-    return this.findOneBy({ username } as Partial<LookALikeUser>);
+    const rows = await getDb()
+      .select()
+      .from(lookalikeUsers)
+      .where(eq(lookalikeUsers.username, username))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async findByChatAndPeer(chatId: number, peerId: number): Promise<LookALikeUser | null> {
-    const sql = `SELECT * FROM ${this.tableName} WHERE chatId = ? AND peerId = ? LIMIT 1`;
-    return this.db.queryOne<LookALikeUser>(sql, [chatId, peerId]);
+    const rows = await getDb()
+      .select()
+      .from(lookalikeUsers)
+      .where(and(eq(lookalikeUsers.chatId, chatId), eq(lookalikeUsers.peerId, peerId)))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async createOrUpdate(user: Omit<LookALikeUser, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
-    const existing = await this.findByChatAndPeer(user.chatId, user.peerId);
-
-    if (existing) {
-      await this.update(existing.id!, {
+    const rows = await getDb()
+      .insert(lookalikeUsers)
+      .values({
         chatSeen: user.chatSeen,
+        chatId: user.chatId,
+        peerId: user.peerId,
         name: user.name,
-        username: user.username,
-      });
-      return existing.id!;
-    }
+        username: user.username ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [lookalikeUsers.chatId, lookalikeUsers.peerId],
+        set: {
+          chatSeen: user.chatSeen,
+          name: user.name,
+          username: user.username ?? null,
+          updatedAt: new Date().toISOString(),
+        },
+      })
+      .returning({ id: lookalikeUsers.id });
 
-    return this.create(user);
+    return rows[0].id;
   }
 
   async getUsersSeenAfter(date: string, chatId?: number): Promise<LookALikeUser[]> {
-    let sql = `SELECT * FROM ${this.tableName} WHERE chatSeen > ?`;
-    const params: any[] = [date];
-
+    const conditions = [gt(lookalikeUsers.chatSeen, date)];
     if (chatId) {
-      sql += ` AND chatId = ?`;
-      params.push(chatId);
+      conditions.push(eq(lookalikeUsers.chatId, chatId));
     }
 
-    return this.db.query<LookALikeUser>(sql, params);
+    return getDb().select().from(lookalikeUsers).where(and(...conditions));
   }
 
   async getUniqueUsersByChat(chatId: number): Promise<LookALikeUser[]> {
@@ -63,11 +77,11 @@ export class LookALikeUserRepository extends BaseRepository<LookALikeUser> {
   }
 
   async deleteByChatId(chatId: number): Promise<void> {
-    const sql = `DELETE FROM ${this.tableName} WHERE chatId = ?`;
-    this.db.execute(sql, [chatId]);
+    await getDb().delete(lookalikeUsers).where(eq(lookalikeUsers.chatId, chatId));
   }
 
   async getAll(limit?: number): Promise<LookALikeUser[]> {
-    return this.findAll(limit);
+    const query = getDb().select().from(lookalikeUsers);
+    return limit ? query.limit(limit) : query;
   }
 }
