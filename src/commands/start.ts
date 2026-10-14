@@ -1,7 +1,7 @@
 import { Command, Args, Flags } from '@oclif/core';
-import { logger } from '../core/logger';
-import { WebKit } from '@/src/application/webkit';
-import { $otel } from '@/src/application/otel';
+import { logger } from '../core/logger.js';
+import { WebKit } from '../application/webkit.js';
+import { $otel } from '../application/otel.js';
 
 export default class StartCommand extends Command {
   static description = 'Start the TON bot server and all services';
@@ -38,9 +38,9 @@ export default class StartCommand extends Command {
       await $otel.start();
     }
 
-    const { runMigrations } = await import('@/src/db/client.js');
-    const { $mtOrchestration } = await import('@/src/application/orchestration.js');
-    const { $campaignLayer } = await import('@/src/core/campaign.layer.js');
+    const { runMigrations } = await import('../db/client.js');
+    const { $mtOrchestration } = await import('../application/orchestration.js');
+    const { $campaignLayer } = await import('../core/campaign.layer.js');
 
     if (flags.migrate) {
       logger.info('Running migrations...');
