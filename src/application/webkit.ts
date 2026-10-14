@@ -1,8 +1,8 @@
 import { serve } from "bun";
-import index from "../../webkit/index.html";
 import { logger } from "../core/logger";
 import { HttpPlayAdapter } from "../adapters/http-play/adapter";
 import { isProd, PORT, MAX_JSON_BYTES, MAX_IMPORT_BYTES, SHUTDOWN_TIMEOUT_MS, tlsBun, HOST } from "../config";
+import index from "../../webkit/index.html";
 
 export interface WebKitOptions {
   /** Enable TLS. Defaults to true. */

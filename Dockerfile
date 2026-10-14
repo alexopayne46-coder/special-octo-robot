@@ -14,7 +14,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN bun build index.ts --outdir dist --target=bun \
+RUN bun build index.ts --outdir dist --target=bun --asset-naming "[name].[ext]" \
     && cp package.json dist/
 
 FROM docker.io/oven/bun:latest AS runtime
@@ -27,6 +27,7 @@ ENV PORT=3000 \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
+COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./
 
 RUN mkdir -p /certs \
