@@ -26,6 +26,8 @@ ENV PORT=3000 \
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src ./src
+COPY --from=build /app/package.json ./
 
 RUN mkdir -p /certs \
     && openssl req -x509 -newkey rsa:2048 -nodes -keyout /certs/key.pem -out /certs/cert.pem -days 365 -subj "/CN=localhost"
