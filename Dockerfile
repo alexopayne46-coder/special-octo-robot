@@ -27,7 +27,7 @@ ENV PORT=3000 \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
-COPY --from=build /app/workers ./workers
+COPY --from=build /app/src/workers ./workers
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./
 
