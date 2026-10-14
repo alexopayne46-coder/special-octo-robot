@@ -6,7 +6,7 @@ WORKDIR /app
 #     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile --production --ignore-scripts
 
 FROM docker.io/oven/bun:latest AS runtime
 WORKDIR /app
