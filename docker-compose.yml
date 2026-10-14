@@ -21,12 +21,6 @@ services:
         source: ./data/certs,
         target: /app/certs
       }
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--no-check-certificate", "https://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,8 +57,7 @@ services:
       - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./data/certs:/etc/nginx/certs:ro
     depends_on:
-      app:
-        condition: service_healthy
+      - app
     networks:
       - app-network
 
