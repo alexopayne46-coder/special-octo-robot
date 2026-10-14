@@ -200,13 +200,16 @@ export class WebkitServer {
 
   }
 
-  async start() {
+  async start(options?: { http3?: boolean; tls?: boolean }) {
+    const useTls = options?.tls ?? true;
+    const useHttp3 = options?.http3 ?? true;
+
     this.server = serve({
       hostname: HOST,
       port: PORT,
-      http3: true,
-      http2: true,
-      tls: tlsBun,
+      http3: useHttp3 && useTls,
+      http2: useTls,
+      tls: useTls ? tlsBun : undefined,
       routes: {
         "/api/play": route("POST", handlePlay),
         "/api/import": route("POST", handleImport),

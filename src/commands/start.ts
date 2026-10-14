@@ -15,6 +15,7 @@ export default class StartCommand extends Command {
     migrate: Flags.boolean({ description: 'Run database migrations', default: true, allowNo: true }),
     autoload: Flags.boolean({ description: 'Autoload accounts', default: true, allowNo: true }),
     tls: Flags.boolean({ description: 'Enable TLS', default: true, allowNo: true }),
+    http3: Flags.boolean({ description: 'Enable HTTP/3 (QUIC)', default: true, allowNo: true }),
     host: Flags.string({ description: 'Bind host', default: process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost' }),
     port: Flags.integer({ description: 'Bind port', default: 3000 }),
   };
@@ -50,7 +51,7 @@ export default class StartCommand extends Command {
 
     if (flags.server) {
       this.log(`Starting web server on ${flags.host}:${flags.port}...`);
-      await $webKitServer.start();
+      await $webKitServer.start({ http3: flags.http3, tls: flags.tls });
     }
 
     this.log('TON bot started successfully');
