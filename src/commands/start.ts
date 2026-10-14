@@ -1,6 +1,7 @@
 import { Command, Args, Flags } from '@oclif/core';
 import { logger } from '../core/logger';
 import { WebKit } from '@/src/application/webkit';
+import { $otel } from '@/src/application/otel';
 
 export default class StartCommand extends Command {
   static description = 'Start the TON bot server and all services';
@@ -18,6 +19,7 @@ export default class StartCommand extends Command {
     autoload: Flags.boolean({ description: 'Autoload accounts', default: true, allowNo: true }),
     tls: Flags.boolean({ description: 'Enable TLS', default: true, allowNo: true }),
     http3: Flags.boolean({ description: 'Enable HTTP/3 (QUIC)', default: true, allowNo: true }),
+    otel: Flags.boolean({ description: 'Enable OpenTelemetry tracing', default: true, allowNo: true }),
     host: Flags.string({ description: 'Bind host', default: process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost' }),
     port: Flags.integer({ description: 'Bind port', default: 3000 }),
   };
@@ -30,6 +32,11 @@ export default class StartCommand extends Command {
     process.env.TLS_ENABLED = String(flags.tls);
 
     logger.info('Starting Telegram Ad Library...');
+
+    if (flags.otel) {
+      logger.info('Starting OpenTelemetry...');
+      await $otel.start();
+    }
 
     const { runMigrations } = await import('@/src/db/client.js');
     const { $mtOrchestration } = await import('@/src/application/orchestration.js');
@@ -52,7 +59,7 @@ export default class StartCommand extends Command {
 
     if (flags.server) {
       logger.info(`Starting web server on ${flags.host}:${flags.port}...`);
-      const webkit = new WebKit({ tls: flags.tls, http3: flags.http3 });
+      const webkit = new WebKit();
       await webkit.start({ tls: flags.tls, http3: flags.http3 });
     }
 
