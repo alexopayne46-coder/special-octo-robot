@@ -14,7 +14,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN bun build index.ts --outdir dist --target=bun --sourcemap
+RUN bun build index.ts --outdir dist --target=bun \
+    && cp package.json dist/
 
 FROM docker.io/oven/bun:latest AS runtime
 WORKDIR /app
