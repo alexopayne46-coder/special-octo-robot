@@ -23,4 +23,4 @@ RUN mkdir -p /certs
 RUN openssl req -x509 -newkey rsa:2048 -nodes -keyout /certs/key.pem -out /certs/cert.pem -days 365 -subj "/CN=localhost"
 
 EXPOSE 3000
-CMD ["bun", "run", "index.ts"]
+CMD ["bun", "run", "index.ts", "--no-tls"]
