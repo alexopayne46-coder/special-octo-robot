@@ -1,4 +1,5 @@
 import { Command, Args, Flags } from '@oclif/core';
+import { logger } from '../core/logger';
 
 export default class StartCommand extends Command {
   static description = 'Start the TON bot server and all services';
@@ -27,7 +28,7 @@ export default class StartCommand extends Command {
     if (flags.port) process.env.PORT = String(flags.port);
     process.env.TLS_ENABLED = String(flags.tls);
 
-    this.log(`Starting TON bot...`);
+    logger.info('Starting Telegram Ad Library...');
 
     const { runMigrations } = await import('@/src/db/client.js');
     const { $mtOrchestration } = await import('@/src/application/orchestration.js');
@@ -35,25 +36,25 @@ export default class StartCommand extends Command {
     const { $webKitServer } = await import('@/webkit');
 
     if (flags.migrate) {
-      this.log('Running migrations...');
+      logger.info('Running migrations...');
       await runMigrations();
     }
 
     if (flags.autoload) {
-      this.log('Autoloading accounts...');
+      logger.info('Autoloading accounts...');
       await $mtOrchestration.autoload();
     }
 
     if (flags.campaign) {
-      this.log('Starting campaign layer...');
+      logger.info('Starting campaign layer...');
       await $campaignLayer.start();
     }
 
     if (flags.server) {
-      this.log(`Starting web server on ${flags.host}:${flags.port}...`);
+      logger.info(`Starting web server on ${flags.host}:${flags.port}...`);
       await $webKitServer.start({ http3: flags.http3, tls: flags.tls });
     }
 
-    this.log('TON bot started successfully');
+    logger.info('TON bot started successfully');
   }
 }
