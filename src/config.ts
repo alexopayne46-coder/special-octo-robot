@@ -8,7 +8,9 @@ export const SHUTDOWN_TIMEOUT_MS = 10_000;
 export const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://pg:pg@localhost:5432/pg";
 
-export const tlsBun = {
+export const tlsEnabled = process.env.TLS_ENABLED !== 'false';
+
+export const tlsBun = tlsEnabled ? {
   key: isProd ? Bun.file("/certs/key.pem") : Bun.file("./data/certs/key.pem"),
   cert: isProd ? Bun.file("/certs/cert.pem") : Bun.file("./data/certs/cert.pem"),
-};
+} : undefined;
